@@ -81,94 +81,11 @@ rm(bedFiles, readBED)
 # ==================================
 
 # =================
-# Permutations via moving the chrX peak locations
-# =================
-
-permuteXpeaks <- function(df, ID, B = 1000, returnVector = FALSE){
-    
-    X_DF <- df %>% filter(id == ID, chrom == 'chrX') %>%
-        mutate(len = end - start + 1)
-    X_n <- nrow(X_DF)
-    
-    # What proportion of peaks overlap PAR?
-    PAR_peaks <- X_DF %>% filter(end >= PAR_boundary) %>% nrow
-    obs <- PAR_peaks / X_n
-    
-    possibleEnds <- c(firstStart + min(X_DF$len), 
-                      chrSizes[1, 'chrX'])
-    
-    onePerm <- function(possRange, sampleSize, cutOff){
-        ends <- ceiling(runif(n = sampleSize, min = possRange[1], max = possRange[2]))
-        n_obs <- length(ends[ends >= cutOff])
-        return(n_obs / sampleSize)
-    }
-    
-    permOvers <- sapply(seq(B), function(i) onePerm(possibleEnds, X_n, PAR_boundary))
-    
-    # Looking for enrichment, so using `>=`
-    pval <- length(permOvers[permOvers >= obs]) / B
-    
-    if (returnVector){
-        permDF <- data.frame(perms = permOvers)
-        colnames(permDF) <- ID
-        return(list(df_p = data.frame(id = ID, p = pval), df_perm = permDF))
-    }
-    
-    return(data.frame(id = ID, p = pval))
-    
-}
-
-# 
-# RNGkind("L'Ecuyer-CMRG")
-# set.seed(569)
-# # Takes ~20-30 seconds
-# perm_peak_locs <- lapply(allSampsDF$id %>% unique,
-#                     function(i){ permuteXpeaks(allSampsDF, i,
-#                                            returnVector = TRUE) })
-# # save(perm_peak_locs, file = 'permute_X_peaks.RData', compress = TRUE)
-# load('permute_X_peaks.RData')
-# PAR_permSumm <- simplify2array(perm_peak_locs)[1,] %>% bind_rows
-# PAR_perms <- simplify2array(perm_peak_locs)[2,] %>% bind_cols
-# sigSamps <- PAR_permSumm %>% filter(p <= 0.05) %>% as.data.frame
-# 
-# summDF <- allSampsDF %>% 
-#     filter(id %in% sigSamps$id) %>% 
-#     group_by(id) %>%
-#     summarize(target = target[1],
-#               tissue = tissueRegions[1,tissue[1]],
-#               sex = sex[1]) %>%
-#     arrange(target, tissue, sex) %>%
-#     select(target, tissue, sex, id)
-# 
-# summDF %>% rowwise %>% 
-#     mutate(p = sigSamps$p[sigSamps$id == id]) %>% ungroup
-# 
-# # allSampsDF %>% filter(tissue == 'test') %>% select(target) %>% unique
-
-
-
-
-
-
-
-
-
-# =================
 # Permutations via moving the PAR location
+#   and counting number of peaks overlapping
 # =================
 
 permutePAR <- function(df, ID, B = 1e3, justX = FALSE, returnVector = FALSE){
-    
-    onePerm <- function(i){
-        chrom <- sample(colNames, 1, prob = chromWeights)
-        # Using `runif` bc it doesn't appear to create the sequence object first, so
-        # saves mucho time. Incorporating `ceiling` makes it equivalent to `sample`.
-        start_i <- ceiling(runif(1, firstStart, chrSizes[1, chrom] - PAR_length + 1))
-        end_i <- start_i + PAR_length - 1
-        peaks <- nrow(id_DF[id_DF$chrom == chrom & id_DF$start >= start_i & 
-                                id_DF$end <= end_i, ])
-        return(peaks)
-    }
     
     id_DF <- df %>% filter(id == ID) %>% select(chrom, start, end)
     if (justX){
@@ -186,6 +103,17 @@ permutePAR <- function(df, ID, B = 1e3, justX = FALSE, returnVector = FALSE){
     # (not considering 3 Mb "N"s at beginning)
     chromWeights <- (chrSizes[1, colNames] - firstStart + 1) / 
         sum(chrSizes[1, colNames] - firstStart + 1)
+    
+    onePerm <- function(i){
+        chrom <- sample(colNames, 1, prob = chromWeights)
+        # Using `runif` bc it doesn't appear to create the sequence object first, so
+        # saves mucho time. Incorporating `ceiling` makes it equivalent to `sample`.
+        start_i <- ceiling(runif(1, firstStart, chrSizes[1, chrom] - PAR_length + 1))
+        end_i <- start_i + PAR_length - 1
+        peaks <- nrow(id_DF[id_DF$chrom == chrom & id_DF$start >= start_i & 
+                                id_DF$end <= end_i, ])
+        return(peaks)
+    }
     
     # If `PAR_peaks==0`, then every perm. will be `>=PAR_peaks`, so to save time:
     if (PAR_peaks == 0){
@@ -234,7 +162,138 @@ permVector <- simplify2array(perm_PAR_loc)[2,] %>% bind_cols
 
 X_sigSamps <- X_perm %>% filter(p <= 0.05)
 
-allSampsDF %>% filter()
+
+
+
+
+# =================
+# Permutations via moving the PAR location
+#   and calculating proportion of new PAR covered in peaks
+# =================
+
+# Get proportion of sequence range covered by ChIP-seq peaks
+# `DF` must be filtered by id
+getProp <- function(DF, focalChrom = 'chrX', limits = c(PAR_boundary,chrSizes[1,'chrX'])){
+    limitEnd <- max(limits)
+    limitStart <- min(limits)
+    limitLength <- limitEnd - limitStart + 1
+    filteredDF <- filter(DF, chrom == focalChrom, end >= limitStart, start <= limitEnd)
+    if (nrow(filteredDF) == 0){
+        return(0)
+    }
+    newStarts <- ifelse(filteredDF$start > limitStart, filteredDF$start, limitStart)
+    newEnds <- ifelse(filteredDF$end < limitEnd, filteredDF$end, limitEnd)
+    indivOverPeaks <- newEnds - newStarts + 1
+    overPeakSum <- sum(indivOverPeaks)
+    peakProp <- overPeakSum / limitLength
+    return(peakProp)
+}
+
+
+permutePARprop <- function(ID, df = allSampsDF, B = 1e3, justX = FALSE, 
+                           returnVector = FALSE){
+    
+    id_DF <- df %>% filter(id == ID) %>% select(chrom, start, end)
+    if (justX){
+        colNames <- c('chrX')
+    } else {
+        colNames <- c(paste0('chr', seq(19)), 'chrX')
+    }
+    
+    id_DF <- id_DF %>% filter(chrom %in% colNames)
+    
+    # What proportion of PAR is peak?
+    PAR_peakProp <- getProp(id_DF)
+    
+    # Weighting chromosome-name sampling by amount of sequence per chromosome
+    # (not considering 3 Mb "N"s at beginning)
+    chromWeights <- (chrSizes[1, colNames] - firstStart + 1) / 
+        sum(chrSizes[1, colNames] - firstStart + 1)
+    
+    onePerm <- function(i){
+        chrom <- sample(colNames, 1, prob = chromWeights)
+        # Using `runif` bc it doesn't appear to create the sequence object first, so
+        # saves mucho time. Incorporating `ceiling` makes it equivalent to `sample`.
+        newPAR_start <- ceiling(runif(1, firstStart, chrSizes[1, chrom] - PAR_length + 1))
+        newPAR_end <- newPAR_start + PAR_length - 1
+        peakProp <- getProp(id_DF, chrom, c(newPAR_start, newPAR_end))
+        return(peakProp)
+    }
+    
+    # If `PAR_peakProp==0`, then every perm. will be `>=PAR_peakProp`, so to save time:
+    if (PAR_peakProp == 0){
+        permIn <- rep(1, B)
+    } else {
+        permIn <- sapply(seq(B), onePerm)
+    }
+    
+    # Looking for enrichment, so using `>=`
+    pval <- length(permIn[permIn >= PAR_peakProp]) / B
+    
+    if (returnVector){
+        permDF <- data.frame(perms = permIn)
+        colnames(permDF) <- ID
+        return(list(df_p = data.frame(id = ID, p = pval), df_perm = permDF))
+    }
+    
+    return(data.frame(id = ID, p = pval))
+}
+
+
+
+# RNGkind("L'Ecuyer-CMRG")
+# set.seed(333)
+# perm_PAR_prop_X <- mclapply(allSampsDF$id %>% unique,
+#                            function(i){ permutePARprop(i, justX = TRUE,
+#                                                        returnVector = TRUE, B = 1e3) },
+#                            mc.cores = numCores)
+# #    user  system elapsed
+# # 228.461  12.575  18.850 
+# set.seed(833)
+# perm_PAR_prop <- mclapply(allSampsDF$id %>% unique,
+#                          function(i){ permutePARprop(i, justX = FALSE,
+#                                                      returnVector = TRUE) },
+#                          mc.cores = numCores)
+# #    user  system elapsed
+# # 216.568  23.381 133.877
+# # save(perm_PAR_prop_X, perm_PAR_prop, file = 'permute_PAR_proportion.RData',
+# # compress = T)
+
+load('permute_PAR_proportion.RData')
+
+X_permProp <- simplify2array(perm_PAR_prop_X)[1,] %>% bind_rows
+X_permPropVector <- simplify2array(perm_PAR_prop_X)[2,] %>% bind_cols
+
+permProp <- simplify2array(perm_PAR_prop)[1,] %>% bind_rows
+permPropVector <- simplify2array(perm_PAR_prop)[2,] %>% bind_cols
+
+
+X_sigPropSamps <- X_permProp %>% filter(p <= 0.05)
+X_sigPropSamps
+
+
+
+
+# ==================================
+# ==================================
+
+# SUMMARIZED DATA FRAMES
+
+# ==================================
+# ==================================
+
+# allSampsDF %>%
+#     group_by(id) %>%
+#     summarize(target = target[1],
+#               tissue = tissueRegions[1,tissue[1]],
+#               sex = sex[1]) %>% 
+#     rowwise %>% 
+#     mutate(p = X_perm$p[X_perm$id == id],
+#            peaks = (allSampsDF[allSampsDF$id == id & allSampsDF$chrom == 'chrX' & 
+#                                    allSampsDF$start >= PAR_boundary,] %>% nrow)) %>% 
+#     ungroup %>%
+#     arrange(target, tissue, sex) %>%
+#     select(target, tissue, sex, id, p, peaks)
 
 X_summDF <- allSampsDF %>%
     filter(id %in% X_sigSamps$id) %>%
@@ -243,53 +302,32 @@ X_summDF <- allSampsDF %>%
               tissue = tissueRegions[1,tissue[1]],
               sex = sex[1]) %>% 
     rowwise %>% 
-    mutate(p = X_sigSamps$p[X_sigSamps$id == id]) %>% 
+    mutate(p = X_sigSamps$p[X_sigSamps$id == id],
+           PARpeaks = (allSampsDF[allSampsDF$id == id & allSampsDF$chrom == 'chrX' & 
+                                      allSampsDF$start >= PAR_boundary,] %>% nrow),
+           Xpeaks = (allSampsDF[allSampsDF$id == id & allSampsDF$chrom == 'chrX',] 
+                     %>% nrow)) %>% 
     ungroup %>%
     arrange(target, tissue, sex) %>%
-    select(target, tissue, sex, id, p)
+    select(target, tissue, sex, id, p, PARpeaks, Xpeaks)
 
-X_summDF
+X_summPropDF <- allSampsDF %>%
+    filter(id %in% X_sigPropSamps$id) %>%
+    group_by(id) %>%
+    summarize(target = target[1],
+              tissue = tissueRegions[1,tissue[1]],
+              sex = sex[1]) %>% 
+    rowwise %>% 
+    mutate(p = X_sigPropSamps$p[X_sigPropSamps$id == id],
+           PARpeaks = (allSampsDF[allSampsDF$id == id & allSampsDF$chrom == 'chrX' & 
+                                      allSampsDF$start >= PAR_boundary,] %>% nrow),
+           Xpeaks = (allSampsDF[allSampsDF$id == id & allSampsDF$chrom == 'chrX',] 
+                     %>% nrow)) %>% 
+    ungroup %>%
+    arrange(target, tissue, sex) %>%
+    select(target, tissue, sex, id, p, PARpeaks, Xpeaks)
 
-
-allSampsDF$target %>% unique
-
-
-
-
-
-
-# # =================
-# # SUMMARIZED DATA FRAME
-# # =================
-# 
-# 
-# # Note: You need to re-do this part.
-# 
-# summBed <- function(bedFile, B = 1000, boundary = PAR_boundary){
-#     
-#     # Derive sample attributes based on file name: target, tissue, sex, ID
-#     attrDF <- str_split(bedFile, '/') %>% unlist %>% tail(., 1) %>%
-#         str_split('_') %>% unlist %>% t %>%
-#         as.data.frame(., stringsAsFactors = F) %>%
-#         rename(target = V1, tissue = V2, sex = V3, id = V4) %>%
-#         mutate(id = str_replace(id, '.bed.gz', ''))
-#     
-#     bedDF <- readBED(bedFile)
-#     
-#     summDF <- attrDF %>%
-#         mutate(pval = permutePAR(bedDF, B, boundary)) %>%
-#         as.tbl
-#     
-#     return(summDF)
-# }
-# 
-# allSamps <- lapply(bedFiles, function(bed) summBed(bed, B = 100)) %>% 
-#     bind_rows
-# 
-# 
-# 
-# allSamps %>% filter(pval <= 0.1) %>% as.data.frame
-# 
+X_summDF; X_summPropDF
 
 
 
@@ -316,9 +354,21 @@ allSampsDF$target %>% unique
 
 
 
-# =================
+
+
+
+
+
+
+
+# ==================================
+# ==================================
+
 # GENE DENSITY
-# =================
+
+# ==================================
+# ==================================
+
 
 # Do this after permutations, only in samples you see enrichment
 
