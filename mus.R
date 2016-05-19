@@ -1,9 +1,4 @@
-library('dplyr')
-library('ggplot2')
-library('stringr')
-library('readr')
-library('parallel')
-
+source('preamble.R')
 
 
 # ==================================
@@ -14,19 +9,15 @@ library('parallel')
 # ==================================
 # ==================================
 
-# Objects created
-#   tbl_df: geneLocs
-#   data.frame: chrSizes, tissueRegions
-#   numeric: firstStart, PAR_boundary
+# __ Objects created __
+#   (tbl_df)     --> geneLocs
+#   (data.frame) --> chrSizes, tissueRegions
+#   (numeric)    --> firstStart, PAR_boundary
+#   (character)  --> bedFiles
 # See `mus_tidying.R` for how these were derived
 load('mus.RData')
 # Changing to 1-based indexing...
 firstStart <- firstStart + 1
-
-# Number of cores to use for parallel processes
-numCores <- 3
-
-options(stringsAsFactors = FALSE)
 
 PAR_length <- chrSizes[1, 'chrX'] - PAR_boundary + 1
 
@@ -79,92 +70,6 @@ rm(bedFiles, readBED)
 
 # ==================================
 # ==================================
-
-# =================
-# Permutations via moving the PAR location
-#   and counting number of peaks overlapping
-# =================
-
-permutePAR <- function(df, ID, B = 1e3, justX = FALSE, returnVector = FALSE){
-    
-    id_DF <- df %>% filter(id == ID) %>% select(chrom, start, end)
-    if (justX){
-        colNames <- c('chrX')
-    } else {
-        colNames <- c(paste0('chr', seq(19)), 'chrX')
-    }
-    
-    id_DF <- id_DF %>% filter(chrom %in% colNames)
-    
-    # How many peaks are fully inside PAR?
-    PAR_peaks <- id_DF %>% filter(chrom == 'chrX', start >= PAR_boundary) %>% nrow
-    
-    # Weighting chromosome-name sampling by amount of sequence per chromosome
-    # (not considering 3 Mb "N"s at beginning)
-    chromWeights <- (chrSizes[1, colNames] - firstStart + 1) / 
-        sum(chrSizes[1, colNames] - firstStart + 1)
-    
-    onePerm <- function(i){
-        chrom <- sample(colNames, 1, prob = chromWeights)
-        # Using `runif` bc it doesn't appear to create the sequence object first, so
-        # saves mucho time. Incorporating `ceiling` makes it equivalent to `sample`.
-        start_i <- ceiling(runif(1, firstStart, chrSizes[1, chrom] - PAR_length + 1))
-        end_i <- start_i + PAR_length - 1
-        peaks <- nrow(id_DF[id_DF$chrom == chrom & id_DF$start >= start_i & 
-                                id_DF$end <= end_i, ])
-        return(peaks)
-    }
-    
-    # If `PAR_peaks==0`, then every perm. will be `>=PAR_peaks`, so to save time:
-    if (PAR_peaks == 0){
-        permIn <- rep(1, B)
-    } else {
-        permIn <- sapply(seq(B), onePerm)
-    }
-    
-    # Looking for enrichment, so using `>=`
-    pval <- length(permIn[permIn >= PAR_peaks]) / B
-    
-    if (returnVector){
-        permDF <- data.frame(perms = permIn)
-        colnames(permDF) <- ID
-        return(list(df_p = data.frame(id = ID, p = pval), df_perm = permDF))
-    }
-    
-    return(data.frame(id = ID, p = pval))
-}
-
-# RNGkind("L'Ecuyer-CMRG")
-# set.seed(946)
-# perm_PAR_loc_X <- mclapply(allSampsDF$id %>% unique,
-#                            function(i){ permutePAR(allSampsDF, i, justX = TRUE,
-#                                                    returnVector = TRUE, B = 1e4) },
-#                            mc.cores = numCores)
-# # user  system elapsed
-# # 80.603   1.969  50.313
-
-# set.seed(328)
-# perm_PAR_loc <- mclapply(allSampsDF$id %>% unique,
-#                          function(i){ permutePAR(allSampsDF, i, justX = FALSE,
-#                                                    returnVector = TRUE) },
-#                          mc.cores = numCores)
-# #    user  system elapsed
-# # 245.868  47.605 180.661
-# save(perm_PAR_loc, perm_PAR_loc_X, file = 'permute_PAR_location.RData', compress = T)
-load('permute_PAR_location.RData')
-
-X_perm <- simplify2array(perm_PAR_loc_X)[1,] %>% bind_rows
-X_permVector <- simplify2array(perm_PAR_loc_X)[2,] %>% bind_cols
-
-perm <- simplify2array(perm_PAR_loc)[1,] %>% bind_rows
-permVector <- simplify2array(perm_PAR_loc)[2,] %>% bind_cols
-
-
-X_sigSamps <- X_perm %>% filter(p <= 0.05)
-
-
-
-
 
 # =================
 # Permutations via moving the PAR location
@@ -239,16 +144,18 @@ permutePARprop <- function(ID, df = allSampsDF, B = 1e3, justX = FALSE,
     return(data.frame(id = ID, p = pval))
 }
 
-
-
+# ~~~~~~~~~~~~~~~~
+#  Running permutations
+# (commented below bc I saved output as RData file, since it takes ~3 min)
+# ~~~~~~~~~~~~~~~~
 # RNGkind("L'Ecuyer-CMRG")
 # set.seed(333)
 # perm_PAR_prop_X <- mclapply(allSampsDF$id %>% unique,
 #                            function(i){ permutePARprop(i, justX = TRUE,
-#                                                        returnVector = TRUE, B = 1e3) },
+#                                                        returnVector = TRUE, B = 1e4) },
 #                            mc.cores = numCores)
 # #    user  system elapsed
-# # 228.461  12.575  18.850 
+# # 414.085  15.637 185.571
 # set.seed(833)
 # perm_PAR_prop <- mclapply(allSampsDF$id %>% unique,
 #                          function(i){ permutePARprop(i, justX = FALSE,
@@ -256,20 +163,17 @@ permutePARprop <- function(ID, df = allSampsDF, B = 1e3, justX = FALSE,
 #                          mc.cores = numCores)
 # #    user  system elapsed
 # # 216.568  23.381 133.877
-# # save(perm_PAR_prop_X, perm_PAR_prop, file = 'permute_PAR_proportion.RData',
+# # save(perm_PAR_prop_X, perm_PAR_prop, file = './R_data/mus/permute_PAR_proportion.RData',
 # # compress = T)
 
-load('permute_PAR_proportion.RData')
+load('./R_data/mus/permute_PAR_proportion.RData')
 
-X_permProp <- simplify2array(perm_PAR_prop_X)[1,] %>% bind_rows
-X_permPropVector <- simplify2array(perm_PAR_prop_X)[2,] %>% bind_cols
+X_perms <- simplify2array(perm_PAR_prop_X)[1,] %>% bind_rows
+X_permVecs <- simplify2array(perm_PAR_prop_X)[2,] %>% bind_cols
 
-permProp <- simplify2array(perm_PAR_prop)[1,] %>% bind_rows
-permPropVector <- simplify2array(perm_PAR_prop)[2,] %>% bind_cols
+ALL_perms <- simplify2array(perm_PAR_prop)[1,] %>% bind_rows
+ALL_permVecs <- simplify2array(perm_PAR_prop)[2,] %>% bind_cols
 
-
-X_sigPropSamps <- X_permProp %>% filter(p <= 0.05)
-X_sigPropSamps
 
 
 
@@ -277,85 +181,29 @@ X_sigPropSamps
 # ==================================
 # ==================================
 
-# SUMMARIZED DATA FRAMES
+# SUMMARY DATA FRAME
 
 # ==================================
 # ==================================
 
-# allSampsDF %>%
-#     group_by(id) %>%
-#     summarize(target = target[1],
-#               tissue = tissueRegions[1,tissue[1]],
-#               sex = sex[1]) %>% 
-#     rowwise %>% 
-#     mutate(p = X_perm$p[X_perm$id == id],
-#            peaks = (allSampsDF[allSampsDF$id == id & allSampsDF$chrom == 'chrX' & 
-#                                    allSampsDF$start >= PAR_boundary,] %>% nrow)) %>% 
-#     ungroup %>%
-#     arrange(target, tissue, sex) %>%
-#     select(target, tissue, sex, id, p, peaks)
-
-X_summDF <- allSampsDF %>%
-    filter(id %in% X_sigSamps$id) %>%
+summDF <- allSampsDF %>%
     group_by(id) %>%
     summarize(target = target[1],
               tissue = tissueRegions[1,tissue[1]],
-              sex = sex[1]) %>% 
-    rowwise %>% 
-    mutate(p = X_sigSamps$p[X_sigSamps$id == id],
-           PARpeaks = (allSampsDF[allSampsDF$id == id & allSampsDF$chrom == 'chrX' & 
-                                      allSampsDF$start >= PAR_boundary,] %>% nrow),
-           Xpeaks = (allSampsDF[allSampsDF$id == id & allSampsDF$chrom == 'chrX',] 
-                     %>% nrow)) %>% 
+              sex = sex[1],
+              PAR_peaks = length(chrom[chrom == 'chrX' & start >= PAR_boundary]),
+              X_peaks = length(chrom[chrom == 'chrX'])) %>%
+    rowwise %>%
+    mutate(X_p = X_perms$p[X_perms$id == id],
+           ALL_p = ALL_perms$p[ALL_perms$id == id]) %>%
     ungroup %>%
-    arrange(target, tissue, sex) %>%
-    select(target, tissue, sex, id, p, PARpeaks, Xpeaks)
+    arrange(target, tissue, sex, id) %>%
+    select(target, tissue, sex, id, PAR_peaks, X_peaks, ALL_p, X_p)
 
-X_summPropDF <- allSampsDF %>%
-    filter(id %in% X_sigPropSamps$id) %>%
-    group_by(id) %>%
-    summarize(target = target[1],
-              tissue = tissueRegions[1,tissue[1]],
-              sex = sex[1]) %>% 
-    rowwise %>% 
-    mutate(p = X_sigPropSamps$p[X_sigPropSamps$id == id],
-           PARpeaks = (allSampsDF[allSampsDF$id == id & allSampsDF$chrom == 'chrX' & 
-                                      allSampsDF$start >= PAR_boundary,] %>% nrow),
-           Xpeaks = (allSampsDF[allSampsDF$id == id & allSampsDF$chrom == 'chrX',] 
-                     %>% nrow)) %>% 
-    ungroup %>%
-    arrange(target, tissue, sex) %>%
-    select(target, tissue, sex, id, p, PARpeaks, Xpeaks)
-
-X_summDF; X_summPropDF
+# write_csv(summDF, './R_data/mus/perm_summary.csv')
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+sigSumm <- summDF %>% filter(X_p <= 0.05)
 
 
 
@@ -370,15 +218,12 @@ X_summDF; X_summPropDF
 # ==================================
 
 
-# Do this after permutations, only in samples you see enrichment
 
 # _____ For the PAR... _____
-# Length in Mb
-PAR_length <- (chrSizes[1, 'chrX'] - PAR_boundary + 1) / 1e6
 # Number of overlapping genes
 PAR_genes <- geneLocs %>% filter(chrom == 'chrX', end >= PAR_boundary) %>% nrow
 # Overlapping genes per Mb
-PAR_density <- PAR_genes / PAR_length
+PAR_density <- PAR_genes / (PAR_length / 1e6)
 
 # Function to get a region's gene density (genes/Mb)
 getDense <- function(focalChrom, limits = NULL){
@@ -398,33 +243,196 @@ getDense <- function(focalChrom, limits = NULL){
     return(geneDensity)
 }
 
-Xwin <- seq(chrSizes[1,'chrX'] - (PAR_length*1e6) + 1, firstStart, -(PAR_length*1e6))
-Xdens <- mclapply(Xwin, 
-                  function(x){getDense('chrX', c(x, x + (PAR_length*1e6)))},
-                  mc.cores = numCores) %>%
-    unlist
+# Getting gene densities of non-overlapping, PAR-sized windows across all chromosomes
+getDenseDF <- function(focalChrom){
+    wins <- seq(chrSizes[1,focalChrom] - PAR_length + 1, firstStart, -PAR_length)
+    dens <- mclapply(wins, 
+                     function(x){ getDense(focalChrom, c(x, x + PAR_length - 1)) },
+                     mc.cores = numCores) %>%
+        unlist
+    return(data.frame(chrom = focalChrom, start = wins, dens = dens) %>% as.tbl)
+}
 
 
 
-matches <- which(Xdens == PAR_density)
+denseDF <- lapply(c(paste0('chr', seq(19)), 'chrX'), getDenseDF) %>% bind_rows
+# user  system elapsed
+# 72.205  17.711  32.224
 
-# Gene density along chrX:
-ggplot(aes(x = Xwin, y = Xdens), data = NULL) + 
-    geom_hline(yintercept = PAR_density, linetype = 3) +
-    geom_point(alpha = 0.4) + 
-    ylab('Gene density') +
-    xlab('Position on chromosome (Mb)') +
-    geom_smooth(method = 'loess', span = 0.2, se = FALSE) +
-    geom_point(data = NULL, inherit.aes = FALSE, color = 'red',
-               aes(x = Xwin[matches], y = Xdens[matches]))
+parDensDF <- denseDF %>% 
+    filter(dens == PAR_density) %>% 
+    mutate(end = start + PAR_length - 1) %>%
+    select(chrom, start, end) %>%
+    mutate(par = ifelse(chrom == 'chrX' & start == PAR_boundary, TRUE, FALSE))
 
 
+getPARdensProps <- function(ID){
+    DF <- allSampsDF %>% filter(id == ID)
+    
+    props <- apply(parDensDF, 1, function(row){
+        getProp(DF, focalChrom = row['chrom'],
+                limits = as.numeric(c(row['start'], row['end'])))
+    })
+    outDF <- data.frame(x = props)
+    colnames(outDF) <- ID
+    return(outDF)
+}
 
-ggplot(aes(x = Xdens[Xdens > 0]), data = NULL) + 
-    geom_histogram(bins = 20)
+PARdensProps <- lapply(sigSumm$id, getPARdensProps) %>% bind_cols
+
+
+densProps <- list(parDensDF, PARdensProps) %>% 
+    bind_cols %>%
+    gather(sample, prop, -chrom, -start, -end, -par) %>% 
+    rowwise %>% 
+    mutate(target = sigSumm$target[sigSumm$id == sample],
+           tissue = sigSumm$tissue[sigSumm$id == sample],
+           sex = sigSumm$sex[sigSumm$id == sample]) %>% 
+    ungroup %>%
+    mutate(sample = factor(sample),
+           target = factor(target),
+           tissue = factor(tissue),
+           sex = factor(sex)) %>%
+    select(target, tissue, sex, chrom, start, end, par, sample, prop)
+
+
+
+lan_theme <- function(base_size = 10, base_family = 'Helvetica') {
+    theme_minimal(base_size = base_size, base_family = base_family) %+replace%
+        theme(
+            strip.text = element_text(face = 'bold'),
+            panel.grid = element_blank(),
+            panel.border = element_rect(fill = NA, color = "gray50"),
+            axis.ticks = element_line(color = "gray50"),
+            axis.ticks.length = unit(2, 'points'),
+            axis.title.x = element_blank(),
+            axis.text.x = element_blank(),
+            strip.text = element_text(face = 'plain', lineheight = 0.6)
+        )
+}
+
+
+
+# Bootstrapped CI of median peak proportion for non-PAR windows of the same length and 
+# gene density as the PAR
+bootNonPar <- function(props, B = 1e3, fun = median){
+    bootVec <- replicate(B, sample(props, replace = TRUE) %>% fun)
+    ci <- quantile(bootVec, probs = c(0.025, 0.975)) %>% as.numeric
+    return(paste(c(fun(props), ci), collapse = ':'))
+}
+
+set.seed(673)
+densBoots <- densProps %>% 
+    filter(!par) %>% 
+    group_by(target, tissue) %>%
+    summarize(ci = bootNonPar(prop)) %>%
+    separate(ci, c('prop', 'lo', 'hi'), sep = ':', convert = TRUE)
+
+set.seed(433)
+densMeanBoots <- densProps %>% 
+    filter(!par) %>% 
+    group_by(target, tissue) %>%
+    summarize(ci = bootNonPar(prop, fun = mean)) %>%
+    separate(ci, c('prop', 'lo', 'hi'), sep = ':', convert = TRUE)
+
+densPlot <- densProps %>%
+    filter(!par) %>%
+    ggplot(aes(x = 1, y = log2(prop))) +
+    lan_theme() +
+    ylab(expression("Peak proportion: " ~ log[2]*"[ "*Mb[peak] ~ Mb[total]^-1*" ]")) +
+    geom_point(alpha = 0.4, position = position_jitter(height = 0, width = 0.2), 
+               shape = 21, color = NA, fill = 'black', size = 1) + 
+    geom_hline(data = densProps %>% filter(par), aes(yintercept = log2(prop)),
+               color = 'dodgerblue', size = 1) +
+    geom_errorbar(data = densBoots, aes(x = 1.0, ymax = log2(hi), ymin = log2(lo)), 
+                  width = 0.02, size = 0.75, color = 'black', alpha = 0.7) +
+    geom_point(data = densBoots, aes(x = 1.0), alpha = 0.7, size = 3, 
+               color = 'black', shape = 18) +
+    facet_grid(. ~ target + tissue, labeller = label_both) +
+    geom_text(data = densProps %>% filter(par, target == 'H3K27me3', tissue == 'kidney'),
+              aes(x = 1.1, y = log2(prop)), hjust = 1, vjust = -0.5, family = 'mono',
+              label = 'PAR', color = 'dodgerblue', fontface = 'bold') +
+    geom_text(data = densProps %>% filter(par, target == 'H3K27me3', tissue == 'kidney'),
+              aes(x = 1.0, y = log2(prop) + 1.0), hjust = 0.5, vjust = 0.5,
+              label = 'non-PAR', color = 'black', alpha = 0.4, fontface = 'bold',
+              family = 'mono')
+
+
+densMeanPlot <- densProps %>%
+    filter(!par) %>%
+    ggplot(aes(x = 1, y = log2(prop))) +
+    lan_theme() +
+    ylab(expression("Peak proportion: " ~ log[2]*"[ "*Mb[peak] ~ Mb[total]^-1*" ]")) +
+    geom_point(alpha = 0.4, position = position_jitter(height = 0, width = 0.2), 
+               shape = 21, color = NA, fill = 'black', size = 1) + 
+    geom_hline(data = densProps %>% filter(par), aes(yintercept = log2(prop)),
+               color = 'dodgerblue', size = 1) +
+    geom_errorbar(data = densMeanBoots, aes(x = 1, ymax = log2(hi), ymin = log2(lo)), 
+                  width = 0.02, size = 0.75, color = 'black', alpha = 0.7) +
+    geom_point(data = densMeanBoots, aes(x = 1), alpha = 0.7, size = 3, 
+               color = 'black', shape = 18) +
+    facet_grid(. ~ target + tissue, labeller = label_both) +
+    geom_text(data = densProps %>% filter(par, target == 'H3K27me3', tissue == 'kidney'),
+              aes(x = 1.1, y = log2(prop)), hjust = 1, vjust = -0.5, family = 'mono',
+              label = 'PAR', color = 'dodgerblue', fontface = 'bold') +
+    geom_text(data = densProps %>% filter(par, target == 'H3K27me3', tissue == 'kidney'),
+              aes(x = 1.0, y = log2(prop) + 1.0), hjust = 0.5, vjust = 0.5,
+              label = 'non-PAR', color = 'black', alpha = 0.6, fontface = 'bold',
+              family = 'mono')
+
+
+densPlot
+densMeanPlot
+
+
+
 
 
 # 
+# # Gene density along chrX:
+# ggplot(aes(x = Xwin, y = Xdens), data = NULL) + 
+#     geom_hline(yintercept = PAR_density, linetype = 3) +
+#     geom_point(alpha = 0.4) + 
+#     ylab('Gene density') +
+#     xlab('Position on chromosome (Mb)') +
+#     geom_smooth(method = 'loess', span = 0.2, se = FALSE) +
+#     geom_point(data = NULL, inherit.aes = FALSE, color = 'red',
+#                aes(x = Xwin[matches], y = Xdens[matches]))
+# 
+# 
+# 
+# ggplot(aes(x = Xdens[Xdens > 0]), data = NULL) + 
+#     geom_histogram(bins = 20)
+# 
+
+# 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
