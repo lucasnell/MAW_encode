@@ -1,0 +1,60 @@
+target,tissue,sex,id,PAR_peaks,X_peaks,ALL_p,X_p
+H3K27ac,bone marrow,M,XVU,2,580,0.413,0.1519
+H3K27ac,brown adipose tissue,M,XVR,1,964,0.454,0.2182
+H3K27ac,cerebellum,M,XWA,0,607,1,1
+H3K27ac,cortical plate,M,XWL,5,729,0.304,0.0676
+H3K27ac,heart,M,XXD,3,939,0.405,0.1719
+H3K27ac,kidney,M,XXK,3,937,0.391,0.1741
+H3K27ac,liver,M,XXV,2,725,0.425,0.1845
+H3K27ac,olfactory bulb,M,XYQ,3,766,0.378,0.1519
+H3K27ac,placenta,F,XYT,1,1271,0.561,0.3144
+H3K27ac,small intestine,M,XYW,2,820,0.476,0.2156
+H3K27ac,spleen,M,XYZ,4,696,0.296,0.0849
+H3K27ac,testis,M,XZG,4,1281,0.312,0.1886
+H3K27ac,thymus,M,XZL,1,366,0.335,0.1925
+H3K27me3,cerebellum,M,XWB,0,65,1,1
+H3K27me3,heart,M,XXF,0,189,1,1
+H3K27me3,kidney,M,XXL,3,138,0.043,0.0064
+H3K27me3,liver,M,XXX,0,190,0.502,0.1369
+H3K27me3,small intestine,M,XYX,0,180,1,1
+H3K27me3,spleen,M,XZA,1,210,0.341,0.0762
+H3K27me3,testis,M,XZH,2,77,0.201,0.0111
+H3K27me3,thymus,M,XZM,3,143,0.17,0.0125
+H3K36me3,heart,M,XXG,0,1746,0.482,0.1865
+H3K36me3,kidney,M,XXM,7,948,0.211,0.0045
+H3K36me3,liver,M,XXY,1,2680,0.39,0.174
+H3K36me3,small intestine,M,XYY,4,2626,0.345,0.1091
+H3K36me3,spleen,M,XZB,5,2301,0.32,0.0519
+H3K36me3,testis,M,XZI,1,13,0.41,0.0078
+H3K36me3,thymus,M,XZN,5,2334,0.277,0.0712
+H3K4me1,bone marrow,M,XVV,3,706,0.499,0.1147
+H3K4me1,brown adipose tissue,M,XVQ,4,1724,0.44,0.1037
+H3K4me1,cortical plate,M,XWM,1,982,0.732,0.309
+H3K4me1,heart,M,XXH,3,1672,0.462,0.1246
+H3K4me1,kidney,M,XXN,1,1666,0.489,0.1434
+H3K4me1,liver,M,XXZ,4,1646,0.46,0.1495
+H3K4me1,lung,M,XYC,3,2063,0.486,0.1667
+H3K4me1,olfactory bulb,M,XYO,4,1061,0.512,0.1342
+H3K4me1,placenta,F,XYS,9,1588,0.399,0.0725
+H3K4me1,small intestine,M,XYU,3,1782,0.561,0.2435
+H3K4me1,spleen,M,XZC,3,1284,0.312,0.0565
+H3K4me1,testis,M,XZE,14,3126,0.428,0.1189
+H3K4me1,thymus,M,XZJ,3,951,0.449,0.1635
+H3K4me3,bone marrow,M,XVW,4,532,0.17,0.0548
+H3K4me3,brown adipose tissue,M,XVP,4,658,0.229,0.0786
+H3K4me3,cerebellum,M,XWD,3,646,0.29,0.1173
+H3K4me3,cortical plate,M,XWN,3,655,0.286,0.1276
+H3K4me3,heart,M,XXI,3,579,0.271,0.1106
+H3K4me3,kidney,M,XXO,2,578,0.355,0.1969
+H3K4me3,liver,M,XYA,4,518,0.164,0.0531
+H3K4me3,lung,M,XYD,3,570,0.275,0.1025
+H3K4me3,olfactory bulb,M,XYP,2,665,0.4,0.2323
+H3K4me3,placenta,F,XYR,3,466,0.193,0.0786
+H3K4me3,small intestine,M,XYV,3,595,0.285,0.1148
+H3K4me3,spleen,M,XZD,4,497,0.147,0.0509
+H3K4me3,testis,M,XZF,2,995,0.647,0.3343
+H3K4me3,thymus,M,XZK,4,513,0.161,0.0532
+H3K79me2,heart,M,XXJ,0,245,1,1
+H3K79me2,liver,M,XYB,0,605,1,1
+H3K9ac,heart,M,XXC,3,686,0.282,0.069
+H3K9ac,liver,M,XXU,3,673,0.408,0.1747

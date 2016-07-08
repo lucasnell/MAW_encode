@@ -5,7 +5,7 @@ library('stringr')
 library('readr')
 
 # Path to folder containing BED files. Change for your system.
-BEDparent <- './bed'
+BEDparent <- './bed_files/mus'
 # Paths to all BED files
 bedFiles <- list.files(BEDparent) %>% 
   str_subset('.bed.gz') %>% 
@@ -13,14 +13,14 @@ bedFiles <- list.files(BEDparent) %>%
 
 # Data frame from GTF file (for gene densities)
 # Took a few minutes to process so I commented it to prevent running unnecessarily
-# geneLocs <- read_tsv(gzfile('./bed/mm9_Ensembl.gtf.gz'), 
+# geneLocs <- read_tsv(gzfile('./bed/mm9_Ensembl.gtf.gz'),
 #                   col_names = c('chrom', 'source', 'feature', 'start', 'end',
 #                                 'score', 'strand', 'frame', 'attribute')) %>%
 #   filter(feature != 'exon') %>%
 #   rowwise %>%
 #   mutate(gene = (attribute %>% str_split('[;"]'))[[1]][2]) %>%
 #   ungroup %>%
-#   group_by(gene) %>% 
+#   group_by(gene) %>%
 #   summarize(chrom = min(chrom), start = min(start), end = max(end)) %>%
 #   arrange(chrom, start, gene) %>%
 #   select(chrom, gene, start, end)

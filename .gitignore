@@ -3,6 +3,4 @@
 *.RData
 *.Ruserdata
 *.Rproj
-bed_files
 .Rproj.user
-R_data

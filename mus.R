@@ -23,7 +23,6 @@ PAR_length <- chrSizes[1, 'chrX'] - PAR_boundary + 1
 
 
 
-
 # ==================================
 # ==================================
 
@@ -118,8 +117,10 @@ permutePARprop <- function(ID, df = allSampsDF, B = 1e3, justX = FALSE,
     onePerm <- function(i){
         chrom <- sample(colNames, 1, prob = chromWeights)
         # Using `runif` bc it doesn't appear to create the sequence object first, so
-        # saves mucho time. Incorporating `ceiling` makes it equivalent to `sample`.
-        newPAR_start <- ceiling(runif(1, firstStart, chrSizes[1, chrom] - PAR_length + 1))
+        # saves mucho time. Incorporating `ceiling` and `-1` on the start position
+        # makes it equivalent to `sample`.
+        newPAR_start <- ceiling(runif(1, firstStart - 1, 
+                                      chrSizes[1, chrom] - PAR_length + 1))
         newPAR_end <- newPAR_start + PAR_length - 1
         peakProp <- getProp(id_DF, chrom, c(newPAR_start, newPAR_end))
         return(peakProp)
@@ -144,10 +145,10 @@ permutePARprop <- function(ID, df = allSampsDF, B = 1e3, justX = FALSE,
     return(data.frame(id = ID, p = pval))
 }
 
-# ~~~~~~~~~~~~~~~~
-#  Running permutations
-# (commented below bc I saved output as RData file, since it takes ~3 min)
-# ~~~~~~~~~~~~~~~~
+# # ~~~~~~~~~~~~~~~~
+# #  Running permutations
+# # (commented below bc I saved output as RData file, since it takes ~3 min)
+# # ~~~~~~~~~~~~~~~~
 # RNGkind("L'Ecuyer-CMRG")
 # set.seed(333)
 # perm_PAR_prop_X <- mclapply(allSampsDF$id %>% unique,
@@ -163,8 +164,8 @@ permutePARprop <- function(ID, df = allSampsDF, B = 1e3, justX = FALSE,
 #                          mc.cores = numCores)
 # #    user  system elapsed
 # # 216.568  23.381 133.877
-# # save(perm_PAR_prop_X, perm_PAR_prop, file = './R_data/mus/permute_PAR_proportion.RData',
-# # compress = T)
+# save(perm_PAR_prop_X, perm_PAR_prop, file = './R_data/mus/permute_PAR_proportion.RData',
+# compress = T)
 
 load('./R_data/mus/permute_PAR_proportion.RData')
 
